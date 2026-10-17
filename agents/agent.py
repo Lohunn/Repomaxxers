@@ -25,18 +25,22 @@ from agents import callbacks, config, tools
 
 logger = logging.getLogger("LogisticsAgents")
 
-# Primary Gemini model used for Dispatcher, Intake, and Planner
-PRIMARY_GEMINI_MODEL = "gemini-2.0-flash"
+# Primary Gemini model used for Dispatcher, Intake, Planner, and Notifier
+PRIMARY_GEMINI_MODEL = "gemini-3.6-flash"
+
+# Ensure LiteLlm can authenticate with Gemini if no second provider key is set
+if config.GOOGLE_API_KEY and "GEMINI_API_KEY" not in os.environ:
+    os.environ["GEMINI_API_KEY"] = config.GOOGLE_API_KEY
 
 # Multi-Model selection for Critic Agent via LiteLlm wrapper
 if config.OPENAI_API_KEY:
     CRITIC_MODEL = LiteLlm(model="openai/gpt-4o-mini")
     logger.info("[CriticAgent Multi-Model] Configured with OpenAI model family via LiteLlm: openai/gpt-4o-mini")
 else:
-    CRITIC_MODEL = LiteLlm(model="gemini/gemini-2.0-flash")
+    CRITIC_MODEL = LiteLlm(model="gemini/gemini-3.6-flash")
     logger.info(
         "[CriticAgent Multi-Model] No second provider key (OPENAI_API_KEY) found. "
-        "Falling back to Gemini model family via LiteLlm: gemini/gemini-2.0-flash"
+        "Falling back to Gemini variant via LiteLlm: gemini/gemini-3.6-flash"
     )
 
 # MCP Toolset connecting to our stdio MCP Server (agents/mcp_server.py)
@@ -45,7 +49,8 @@ mcp_toolset = McpToolset(
         server_params=StdioServerParameters(
             command=sys.executable,
             args=["-m", "agents.mcp_server"],
-        )
+        ),
+        timeout=15.0,
     )
 )
 
@@ -68,6 +73,7 @@ intake_agent = LlmAgent(
     ),
     tools=[tools.parse_orders],
     output_key="parsed_orders",
+    before_model_callback=callbacks.before_model_callback,
     before_tool_callback=callbacks.before_tool_callback,
     after_tool_callback=callbacks.after_tool_callback,
     on_tool_error_callback=callbacks.on_tool_error_callback,
@@ -92,10 +98,9 @@ planner_agent = LlmAgent(
     ),
     tools=[
         mcp_toolset,
-        tools.get_vehicle,
-        tools.plan_route,
     ],
     output_key="route_plan",
+    before_model_callback=callbacks.before_model_callback,
     before_tool_callback=callbacks.before_tool_callback,
     after_tool_callback=callbacks.after_tool_callback,
     on_tool_error_callback=callbacks.on_tool_error_callback,
@@ -122,11 +127,11 @@ critic_agent = LlmAgent(
     ),
     tools=[
         mcp_toolset,
-        tools.check_windows,
         tools.complete_feedback_loop,
         exit_loop,
     ],
     output_key="critic_feedback",
+    before_model_callback=callbacks.before_model_callback,
     before_tool_callback=callbacks.before_tool_callback,
     after_tool_callback=callbacks.after_tool_callback,
     on_tool_error_callback=callbacks.on_tool_error_callback,
@@ -187,10 +192,7 @@ dispatcher = LlmAgent(
     ),
     tools=[
         mcp_toolset,
-        tools.get_vehicle,
         tools.parse_orders,
-        tools.plan_route,
-        tools.check_windows,
         tools.draft_delay_notification,
     ],
     sub_agents=[
@@ -198,6 +200,7 @@ dispatcher = LlmAgent(
         route_optimizer_loop,
         notifier_agent,
     ],
+    before_model_callback=callbacks.before_model_callback,
     before_tool_callback=callbacks.before_tool_callback,
     after_tool_callback=callbacks.after_tool_callback,
     on_tool_error_callback=callbacks.on_tool_error_callback,

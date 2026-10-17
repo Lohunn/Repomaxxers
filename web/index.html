@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Logistics Dispatch Agents | Autonomous Fleet Operations</title>
+  <meta name="description" content="Autonomous multi-model logistics dispatch and route optimization platform powered by Google ADK, Gemini, Routes API, and MCP.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Header Bar -->
+  <header class="header">
+    <div class="header-left">
+      <div class="brand-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="1" y="3" width="15" height="13"></rect>
+          <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
+          <circle cx="5.5" cy="18.5" r="2.5"></circle>
+          <circle cx="18.5" cy="18.5" r="2.5"></circle>
+        </svg>
+      </div>
+      <div class="brand-info">
+        <h1 class="brand-title">LOGISTICS DISPATCH AGENTS</h1>
+        <div class="brand-badges">
+          <span class="badge badge-adk">Google ADK 2.12</span>
+          <span class="badge badge-gemini">Gemini 3.6 Flash</span>
+          <span class="badge badge-mcp">MCP Stdio</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div id="systemStatusPill" class="status-pill status-operational">
+        <span class="status-dot"></span>
+        <span id="systemStatusText">Operational</span>
+      </div>
+      <div class="vehicle-select-wrap">
+        <label for="vehicleSelect">Vehicle:</label>
+        <select id="vehicleSelect" class="select-input">
+          <option value="driver-1" selected>driver-1 (Chennai Metro)</option>
+        </select>
+      </div>
+      <div id="liveClock" class="live-clock">--:--:-- UTC</div>
+      <button id="btnOpenDiagnostics" class="btn btn-secondary btn-sm" title="Inspect system components">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+        Diagnostics
+      </button>
+    </div>
+  </header>
+
+  <!-- Main 3-Column Dashboard -->
+  <main class="dashboard-grid">
+    <!-- COLUMN 1: Fleet Telemetry & Simulator Controls -->
+    <section class="col col-telemetry">
+      <!-- Live Telemetry Card -->
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Live Vehicle Telemetry</h2>
+          <span id="vehicleModeBadge" class="badge badge-outline">Active</span>
+        </div>
+        <div class="telemetry-grid">
+          <div class="telemetry-item">
+            <span class="telemetry-label">Latitude</span>
+            <span id="telemetryLat" class="telemetry-value">13.0827° N</span>
+          </div>
+          <div class="telemetry-item">
+            <span class="telemetry-label">Longitude</span>
+            <span id="telemetryLon" class="telemetry-value">80.2707° E</span>
+          </div>
+          <div class="telemetry-item">
+            <span class="telemetry-label">Speed</span>
+            <span id="telemetrySpeed" class="telemetry-value">0.0 km/h</span>
+          </div>
+          <div class="telemetry-item">
+            <span class="telemetry-label">Heading</span>
+            <span id="telemetryHeading" class="telemetry-value">0° (N)</span>
+          </div>
+          <div class="telemetry-item full-width">
+            <span class="telemetry-label">Current Address / Hub</span>
+            <span id="telemetryAddress" class="telemetry-value text-truncate">Chennai Central Logistics Hub</span>
+          </div>
+          <div class="telemetry-item full-width">
+            <span class="telemetry-label">Last Ping</span>
+            <span id="telemetryPing" class="telemetry-value text-muted">Just now</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Autonomous Simulator Controls -->
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Driver Simulation Controller</h2>
+          <span id="simStatusBadge" class="badge badge-idle">Idle</span>
+        </div>
+        <p class="card-desc">Simulates real-world vehicle GPS movement along the Chennai metropolitan delivery corridor.</p>
+        <div class="sim-actions">
+          <button id="btnStartSim" class="btn btn-primary btn-block">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            Start Driver Simulation
+          </button>
+          <button id="btnStopSim" class="btn btn-outline btn-block" disabled>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="6" width="12" height="12"></rect>
+            </svg>
+            Stop Simulation
+          </button>
+        </div>
+        <div class="sim-progress-wrap">
+          <div class="sim-progress-bar">
+            <div id="simProgressBar" class="sim-progress-fill" style="width: 0%;"></div>
+          </div>
+          <div class="sim-progress-labels">
+            <span id="simStepLabel">Step: 0 / 21</span>
+            <span id="simWaypointLabel">Hub -> Anna Salai</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Real-time Fleet KPIs -->
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Dispatch Operations KPIs</h2>
+        </div>
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <span class="kpi-num" id="kpiOnTime">100%</span>
+            <span class="kpi-title">On-Time Rate</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-num" id="kpiStopsDone">0 / 0</span>
+            <span class="kpi-title">Stops Delivered</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-num" id="kpiHealing">0</span>
+            <span class="kpi-title">Self-Healing Events</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-num" id="kpiLoops">0</span>
+            <span class="kpi-title">Loop Iterations</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Architecture Health Checks -->
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">System Health & Fallbacks</h2>
+        </div>
+        <div class="health-list">
+          <div class="health-item">
+            <span class="health-icon health-pass">✓</span>
+            <div class="health-info">
+              <span class="health-title">Gemini 3.6 Flash</span>
+              <span class="health-sub">Active Google GenAI Model</span>
+            </div>
+          </div>
+          <div class="health-item">
+            <span id="routesHealthIcon" class="health-icon health-warn">⚡</span>
+            <div class="health-info">
+              <span class="health-title">Routes Optimization</span>
+              <span id="routesHealthSub" class="health-sub">Haversine TSP Degraded Active</span>
+            </div>
+          </div>
+          <div class="health-item">
+            <span class="health-icon health-pass">✓</span>
+            <div class="health-info">
+              <span class="health-title">Dual Store Backend</span>
+              <span class="health-sub">Local JSON + Firestore Fallback</span>
+            </div>
+          </div>
+          <div class="health-item">
+            <span class="health-icon health-pass">✓</span>
+            <div class="health-info">
+              <span class="health-title">MCP Stdio Server</span>
+              <span class="health-sub">3 Tools Registered via McpToolset</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- COLUMN 2: Route Map & Delivery Sequence -->
+    <section class="col col-map">
+      <!-- Map Display Container -->
+      <div class="card map-card">
+        <div class="card-header">
+          <div class="map-title-wrap">
+            <h2 class="card-title">Chennai Metro Dispatch Map</h2>
+            <span id="mapEngineBadge" class="badge badge-primary">Interactive Vector Map</span>
+          </div>
+          <div class="map-legend">
+            <span class="legend-item"><span class="legend-dot dot-driver"></span> Driver</span>
+            <span class="legend-item"><span class="legend-dot dot-pending"></span> Pending Stop</span>
+            <span class="legend-item"><span class="legend-dot dot-completed"></span> Completed</span>
+          </div>
+        </div>
+
+        <div id="mapContainer" class="map-container">
+          <!-- Google Maps container or Vector fallback canvas -->
+          <div id="googleMap" class="google-map-elem"></div>
+          <svg id="vectorMap" class="vector-map-elem" viewBox="0 0 800 500">
+            <!-- Road and background paths -->
+            <rect width="800" height="500" fill="#f8fafc" />
+            <path d="M 100 80 Q 250 150 400 220 T 700 380" stroke="#e2e8f0" stroke-width="24" fill="none" stroke-linecap="round" />
+            <path d="M 200 450 Q 350 300 400 220 T 600 80" stroke="#e2e8f0" stroke-width="18" fill="none" stroke-linecap="round" />
+            <path d="M 50 250 L 750 250" stroke="#f1f5f9" stroke-width="12" fill="none" />
+            
+            <!-- Active Route Polyline -->
+            <path id="routePolyline" d="" stroke="#0f172a" stroke-width="4" stroke-dasharray="8 4" fill="none" />
+
+            <!-- Static Location Labels -->
+            <text x="140" y="85" fill="#94a3b8" font-size="11" font-weight="500">Chennai Central Hub</text>
+            <text x="360" y="190" fill="#94a3b8" font-size="11" font-weight="500">T. Nagar Commercial</text>
+            <text x="320" y="295" fill="#94a3b8" font-size="11" font-weight="500">Guindy Estate</text>
+            <text x="560" y="325" fill="#94a3b8" font-size="11" font-weight="500">Adyar Zone</text>
+            <text x="520" y="440" fill="#94a3b8" font-size="11" font-weight="500">OMR Tech Corridor</text>
+
+            <!-- Stop Pin Group -->
+            <g id="stopPinsGroup"></g>
+
+            <!-- Driver Marker -->
+            <g id="driverMarkerGroup" transform="translate(180, 100)">
+              <circle cx="0" cy="0" r="16" fill="#3b82f6" fill-opacity="0.2" class="pulse-ring" />
+              <circle cx="0" cy="0" r="10" fill="#0f172a" />
+              <polygon points="0,-7 5,5 0,2 -5,5" fill="#ffffff" id="driverHeadingArrow" />
+            </g>
+          </svg>
+        </div>
+
+        <!-- Route Summary Ribbon -->
+        <div class="route-summary-bar">
+          <div class="summary-stat">
+            <span class="stat-label">Total Distance</span>
+            <span id="routeDistance" class="stat-val">-- km</span>
+          </div>
+          <div class="summary-stat">
+            <span class="stat-label">Transit Time</span>
+            <span id="routeDuration" class="stat-val">-- mins</span>
+          </div>
+          <div class="summary-stat">
+            <span class="stat-label">Routing Mode</span>
+            <span id="routeMode" class="stat-val">Awaiting dispatch</span>
+          </div>
+          <div class="summary-stat">
+            <span class="stat-label">Self-Healing</span>
+            <span id="routeHealingStatus" class="stat-val text-success">Protected</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Active Delivery Route Sequence Table -->
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Scheduled Delivery Sequence</h2>
+          <span id="stopCountBadge" class="badge badge-outline">0 Stops</span>
+        </div>
+        <div class="table-responsive">
+          <table class="table" id="stopsTable">
+            <thead>
+              <tr>
+                <th>Seq</th>
+                <th>Destination</th>
+                <th>Customer</th>
+                <th>Window</th>
+                <th>Planned ETA</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="stopsTableBody">
+              <tr class="empty-row">
+                <td colspan="6">No active route planned. Submit an order prompt to optimize dispatch.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- COLUMN 3: Conversational Dispatcher & Multi-Agent Execution Stream -->
+    <section class="col col-chat">
+      <!-- Quick Dispatch Prompts -->
+      <div class="card quick-actions-card">
+        <div class="card-header">
+          <h2 class="card-title">Judge Demo Prompts</h2>
+        </div>
+        <div class="chips-container">
+          <button class="chip" data-prompt="Where is driver-1?">
+            📍 Where is driver-1?
+          </button>
+          <button class="chip" data-prompt="2 boxes to Adyar before 2pm, 1 parcel to T Nagar by 4pm, 3 boxes to Velachery by 6pm">
+            📦 3-Stop Route Intake
+          </button>
+          <button class="chip" data-prompt="Deliver to Tambaram by 1:00pm">
+            ⚠️ Tambaram Window Breach Test
+          </button>
+          <button class="chip" data-prompt="What is the current vehicle status and active deliveries?">
+            📋 Full Fleet Status
+          </button>
+        </div>
+      </div>
+
+      <!-- Chat Stream Panel -->
+      <div class="card chat-card">
+        <div class="card-header">
+          <h2 class="card-title">Autonomous Dispatcher</h2>
+          <span class="badge badge-adk">ADK LoopAgent</span>
+        </div>
+        <div id="chatHistory" class="chat-history">
+          <div class="chat-message bot-message">
+            <div class="msg-avatar">ADK</div>
+            <div class="msg-content">
+              <p>Welcome to <strong>Logistics Dispatch Agents</strong>. I coordinate live vehicle tracking, order intake, Google Routes API planning, and deadline audits with self-healing recovery.</p>
+              <p>Click any demo prompt above or describe delivery orders to begin!</p>
+            </div>
+          </div>
+        </div>
+
+        <form id="chatForm" class="chat-input-form">
+          <input type="text" id="chatInput" class="text-input" placeholder="Enter order or command (e.g. 'Where is driver-1?')..." autocomplete="off" />
+          <button type="submit" id="btnSendChat" class="btn btn-primary">
+            <span>Send</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+        </form>
+      </div>
+
+      <!-- Multi-Agent Real-Time Execution Timeline -->
+      <div class="card timeline-card">
+        <div class="card-header">
+          <h2 class="card-title">Multi-Agent Execution Timeline</h2>
+          <span id="timelineStatusBadge" class="badge badge-idle">Ready</span>
+        </div>
+        <p class="card-desc">Live streaming telemetry of agent delegation, tool executions, and self-healing recovery events.</p>
+        <div id="agentTimeline" class="agent-timeline">
+          <div class="timeline-empty">Awaiting query execution...</div>
+        </div>
+      </div>
+
+      <!-- Customer Delay Notifications Drawer -->
+      <div id="delayDrawer" class="card delay-drawer hidden">
+        <div class="card-header">
+          <h2 class="card-title text-danger">⚠️ Drafted Delay Notifications</h2>
+          <span class="badge badge-warn">Notifier Agent</span>
+        </div>
+        <div id="delayList" class="delay-list"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Diagnostics Modal -->
+  <div id="diagnosticsModal" class="modal hidden">
+    <div class="modal-overlay"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">Logistics Agents System Diagnostics</h3>
+        <button id="btnCloseModal" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body" id="modalDiagnosticsContent">
+        <div class="loading-spinner">Running diagnostic probe...</div>
+      </div>
+      <div class="modal-footer">
+        <button id="btnRerunDiagnostics" class="btn btn-primary btn-sm">Re-run Diagnostics</button>
+        <button id="btnCloseModalBtn" class="btn btn-secondary btn-sm">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

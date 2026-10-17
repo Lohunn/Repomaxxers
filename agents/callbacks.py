@@ -165,3 +165,34 @@ def on_tool_error_callback(
         "healed": True,
         "message": f"Tool '{tool_name}' encountered an error but was caught by self-healing: {str(error)}",
     }
+
+
+_last_model_call_timestamp: float = 0.0
+
+
+def before_model_callback(context: Context, request: Any) -> Any:
+    """Self-healing model pacing: prevents exceeding the 5 RPM free-tier rate limit burst."""
+    global _last_model_call_timestamp
+    now = time.time()
+    elapsed = now - _last_model_call_timestamp
+    min_interval = 3.5  # Ensure at least 3.5s spacing between LLM calls
+    if elapsed < min_interval:
+        sleep_dur = min_interval - elapsed
+        logger.debug("[Self-Healing Model Pacer] Throttling model call for %.2fs...", sleep_dur)
+        time.sleep(sleep_dur)
+    _last_model_call_timestamp = time.time()
+    return None
+
+
+def on_model_error_callback(context: Context, request: Any, error: Exception) -> Any:
+    """Catches model-level exceptions (such as 429 rate limit or 503 transient unavailable)."""
+    err_str = str(error)
+    logger.warning("[Self-Healing Model Callback] Error caught: %s", err_str)
+    if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "503" in err_str or "UNAVAILABLE" in err_str:
+        log_healing_event(
+            context,
+            f"[Self-Healing Rate Limit/Quota] Caught transient model error ({err_str[:80]}...). Backing off."
+        )
+        # Sleep for rate limit recovery
+        time.sleep(15.0)
+    return None

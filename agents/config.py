@@ -12,6 +12,7 @@ load_dotenv(Path.cwd() / ".env")
 # Demo-safe flags
 USE_MOCK_ROUTES: bool = os.getenv("USE_MOCK_ROUTES", "false").lower() in ("true", "1", "yes")
 USE_LOCAL_STORE: bool = os.getenv("USE_LOCAL_STORE", "false").lower() in ("true", "1", "yes")
+FORCE_ROUTES_FAILURE: bool = os.getenv("FORCE_ROUTES_FAILURE", "false").lower() in ("true", "1", "yes")
 
 # API Keys & Cloud Configuration
 GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "")

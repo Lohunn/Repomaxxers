@@ -33,6 +33,7 @@ MOCK_GEOCODE_DB = {
     "mylapore": {"latitude": 13.0368, "longitude": 80.2676, "display": "Mylapore, Chennai"},
     "anna nagar": {"latitude": 13.0850, "longitude": 80.2101, "display": "Anna Nagar, Chennai"},
     "omr": {"latitude": 12.9150, "longitude": 80.2280, "display": "OMR IT Corridor, Chennai"},
+    "tambaram": {"latitude": 12.9249, "longitude": 80.1000, "display": "Tambaram, Chennai"},
 }
 
 
@@ -121,16 +122,21 @@ def parse_orders(order_text: str) -> dict[str, Any]:
             if "urgent" in segment or "high priority" in segment or "asap" in segment:
                 priority = "high"
 
-            if "before 1" in segment or "by 1" in segment or "before 13" in segment:
-                window_end = "13:00"
-            elif "before 2" in segment or "by 2" in segment or "before 14" in segment:
-                window_end = "14:00"
-            elif "before 3" in segment or "by 3" in segment or "before 15" in segment:
-                window_end = "15:00"
-            elif "before 4" in segment or "by 4" in segment or "before 16" in segment:
-                window_end = "16:00"
-            elif "before 5" in segment or "by 5" in segment or "before 17" in segment:
-                window_end = "17:00"
+            # Extract precise time windows using regex (e.g. 'by 3:05pm', 'before 5pm', 'before 14:00', 'before 2')
+            import re
+            time_match = re.search(r'(?:before|by)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?', segment)
+            if time_match:
+                h = int(time_match.group(1))
+                m = int(time_match.group(2) or 0)
+                meridiem = (time_match.group(3) or "").lower()
+                if meridiem == "pm" and h < 12:
+                    h += 12
+                elif meridiem == "am" and h == 12:
+                    h = 0
+                elif not meridiem and 1 <= h <= 7:
+                    # In commercial logistics dispatch, delivery hours 1-7 without meridiem represent afternoon (PM)
+                    h += 12
+                window_end = f"{h:02d}:{m:02d}"
 
             if "call first" in segment or "call on arrival" in segment or "call" in segment:
                 notes = "Call customer first"
@@ -276,7 +282,12 @@ def plan_route(
     else:
         departure_time = now
 
-    # Mock mode or missing key triggers graceful fallback
+    # Mock mode or forced failure triggers graceful fallback
+    if config.FORCE_ROUTES_FAILURE:
+        return _plan_route_haversine_fallback(
+            origin_lat, origin_lng, stops, departure_time, "FORCE_ROUTES_FAILURE=true active"
+        )
+
     if config.USE_MOCK_ROUTES:
         return _plan_route_haversine_fallback(
             origin_lat, origin_lng, stops, departure_time, "USE_MOCK_ROUTES=true"

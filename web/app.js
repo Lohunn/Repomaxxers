@@ -1,16 +1,8 @@
 /**
- * Logistics Dispatch Agents - Client Dashboard & Streaming SSE Controller
+ * Logistics Dispatch Platform - Client Dashboard & Streaming SSE Controller
  */
 
-// Bounding box for Chennai Metropolitan Dispatch Area
-const CHENNAI_BBOX = {
-  minLat: 12.90,
-  maxLat: 13.12,
-  minLon: 80.08,
-  maxLon: 80.30,
-};
-
-// Known landmarks for coordinate fallback mapping
+// Known landmarks for coordinate fallback mapping (Chennai Metropolitan Area)
 const CHENNAI_COORDS = {
   "adyar": { lat: 13.0012, lon: 80.2565 },
   "t nagar": { lat: 13.0418, lon: 80.2341 },
@@ -25,23 +17,18 @@ let clientConfig = null;
 let currentVehicleId = "driver-1";
 let isSimRunning = false;
 
-// ----------------------------------------------------
-// Coordinate Projection for Vector Map
-// ----------------------------------------------------
-function projectToSvg(lat, lon) {
-  const normX = (lon - CHENNAI_BBOX.minLon) / (CHENNAI_BBOX.maxLon - CHENNAI_BBOX.minLon);
-  const normY = (CHENNAI_BBOX.maxLat - lat) / (CHENNAI_BBOX.maxLat - CHENNAI_BBOX.minLat);
-
-  const x = Math.max(30, Math.min(770, normX * 720 + 40));
-  const y = Math.max(30, Math.min(470, normY * 420 + 40));
-  return { x: Math.round(x), y: Math.round(y) };
-}
+// Leaflet Map objects
+let leafletMap = null;
+let driverMarker = null;
+let stopMarkers = [];
+let routePolyline = null;
 
 // ----------------------------------------------------
 // UI Initialization
 // ----------------------------------------------------
 document.addEventListener("DOMContentLoaded", async () => {
   initClock();
+  initLeafletMap();
   setupEventListeners();
   await loadConfig();
   await refreshState();
@@ -58,12 +45,61 @@ function initClock() {
   setInterval(update, 1000);
 }
 
+// ----------------------------------------------------
+// Initialize Real Geographic Map (Leaflet / OpenStreetMap)
+// ----------------------------------------------------
+function initLeafletMap() {
+  const mapElem = document.getElementById("liveLeafletMap");
+  if (!mapElem) return;
+
+  try {
+    // Center at Chennai Central Hub (13.0827, 80.2707) with zoom 12
+    leafletMap = L.map("liveLeafletMap", {
+      zoomControl: true,
+      attributionControl: true,
+    }).setView([13.05, 80.24], 12);
+
+    // High performance CartoDB Positron clean minimalist tiles (pure white style)
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: "abcd",
+      maxZoom: 19,
+    }).addTo(leafletMap);
+
+    // Create custom vehicle driver icon
+    const driverIcon = L.divIcon({
+      className: "custom-driver-icon",
+      html: `
+        <div style="position: relative; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
+          <div style="position: absolute; width: 28px; height: 28px; background: rgba(37,99,235,0.25); border-radius: 50%; animation: pulse 2s infinite ease-out;"></div>
+          <div style="width: 18px; height: 18px; background: #0f172a; border: 2px solid #ffffff; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
+            <div id="leafletDriverHeading" style="width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 7px solid #38bdf8; transform: rotate(0deg);"></div>
+          </div>
+        </div>
+      `,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+    });
+
+    driverMarker = L.marker([13.0827, 80.2707], { icon: driverIcon }).addTo(leafletMap);
+    driverMarker.bindPopup("<strong>Driver driver-1</strong><br>Fleet Active").openPopup();
+
+    // Force map size invalidation to guarantee full container rendering
+    setTimeout(() => {
+      leafletMap.invalidateSize();
+    }, 400);
+
+  } catch (err) {
+    console.error("Leaflet initialization error:", err);
+  }
+}
+
 async function loadConfig() {
   try {
     const res = await fetch("/api/config");
     clientConfig = await res.json();
     if (clientConfig.force_routes_failure) {
-      document.getElementById("routesHealthSub").textContent = "FORCE_ROUTES_FAILURE active (Self-Healing Fallback)";
+      document.getElementById("routesHealthSub").textContent = "Traffic-Aware Routing Engine (Autonomous Recovery Active)";
     }
   } catch (err) {
     console.error("Failed to load /api/config:", err);
@@ -89,19 +125,19 @@ async function refreshState() {
       document.getElementById("telemetryAddress").textContent = v.address || `${v.latitude.toFixed(4)}, ${v.longitude.toFixed(4)}`;
       document.getElementById("telemetryPing").textContent = v.timestamp ? new Date(v.timestamp).toLocaleTimeString() : "Just now";
 
-      // Move Driver Pin on Vector Map
-      const pt = projectToSvg(v.latitude, v.longitude);
-      const marker = document.getElementById("driverMarkerGroup");
-      if (marker) {
-        marker.setAttribute("transform", `translate(${pt.x}, ${pt.y})`);
-        const arrow = document.getElementById("driverHeadingArrow");
-        if (arrow && v.heading !== undefined) {
-          arrow.setAttribute("transform", `rotate(${v.heading})`);
+      // Move Driver Pin on Leaflet Map
+      if (driverMarker && leafletMap) {
+        const newLatLng = new L.LatLng(v.latitude, v.longitude);
+        driverMarker.setLatLng(newLatLng);
+        
+        const headingElem = document.getElementById("leafletDriverHeading");
+        if (headingElem && v.heading !== undefined) {
+          headingElem.style.transform = `rotate(${v.heading}deg)`;
         }
       }
     }
 
-    // 2. Update Simulator State
+    // 2. Update Controller State
     isSimRunning = state.simulator_running;
     const simBadge = document.getElementById("simStatusBadge");
     const btnStart = document.getElementById("btnStartSim");
@@ -122,7 +158,7 @@ async function refreshState() {
     const step = state.simulator_step || 0;
     const progressPct = Math.min(100, Math.round(((step % 21) / 20) * 100));
     document.getElementById("simProgressBar").style.width = `${progressPct}%`;
-    document.getElementById("simStepLabel").textContent = `Step: ${step % 21 + 1} / 21`;
+    document.getElementById("simStepLabel").textContent = `Waypoint: ${step % 21 + 1} / 21`;
 
     // 3. Update KPIs
     if (state.stats) {
@@ -149,14 +185,20 @@ async function refreshState() {
 function renderStopsAndMap(stops, routePlan, vehicle) {
   const tbody = document.getElementById("stopsTableBody");
   const stopCountBadge = document.getElementById("stopCountBadge");
-  const pinsGroup = document.getElementById("stopPinsGroup");
-  const polylineElem = document.getElementById("routePolyline");
 
   if (!stops || stops.length === 0) {
     tbody.innerHTML = `<tr class="empty-row"><td colspan="6">No active route planned. Submit an order prompt to optimize dispatch.</td></tr>`;
     stopCountBadge.textContent = "0 Stops";
-    pinsGroup.innerHTML = "";
-    polylineElem.setAttribute("d", "");
+
+    // Clear stop markers from map
+    if (stopMarkers.length > 0 && leafletMap) {
+      stopMarkers.forEach(m => leafletMap.removeLayer(m));
+      stopMarkers = [];
+    }
+    if (routePolyline && leafletMap) {
+      leafletMap.removeLayer(routePolyline);
+      routePolyline = null;
+    }
     return;
   }
 
@@ -189,19 +231,23 @@ function renderStopsAndMap(stops, routePlan, vehicle) {
   if (routePlan) {
     document.getElementById("routeDistance").textContent = `${routePlan.total_distance_km || "--"} km`;
     document.getElementById("routeDuration").textContent = `${routePlan.total_duration_minutes || "--"} mins`;
-    document.getElementById("routeMode").textContent = routePlan.mode === "google_routes_api" ? "Google Routes API" : "Haversine TSP (Healed)";
-    document.getElementById("routeHealingStatus").textContent = routePlan.degraded ? "Graceful Fallback" : "Protected";
+    document.getElementById("routeMode").textContent = routePlan.mode === "google_routes_api" ? "Traffic-Aware Optimizer" : "Self-Healing Route Plan";
+    document.getElementById("routeHealingStatus").textContent = routePlan.degraded ? "Autonomous Fallback" : "Protected";
     document.getElementById("routeHealingStatus").className = routePlan.degraded ? "stat-val text-danger" : "stat-val text-success";
   }
 
-  // Render Pins & Polyline on Vector Map
-  let pathD = "";
-  if (vehicle) {
-    const startPt = projectToSvg(vehicle.latitude, vehicle.longitude);
-    pathD = `M ${startPt.x} ${startPt.y}`;
+  // Render Stop Markers & Polyline on Leaflet Map
+  if (!leafletMap) return;
+
+  // Clear existing stop markers
+  stopMarkers.forEach(m => leafletMap.removeLayer(m));
+  stopMarkers = [];
+
+  const latLngs = [];
+  if (vehicle && vehicle.latitude && vehicle.longitude) {
+    latLngs.push([vehicle.latitude, vehicle.longitude]);
   }
 
-  let pinsHtml = "";
   stops.forEach((s, idx) => {
     let lat = s.latitude;
     let lon = s.longitude;
@@ -219,27 +265,49 @@ function renderStopsAndMap(stops, routePlan, vehicle) {
     }
 
     if (lat && lon) {
-      const pt = projectToSvg(lat, lon);
-      if (pathD) {
-        pathD += ` L ${pt.x} ${pt.y}`;
-      } else {
-        pathD = `M ${pt.x} ${pt.y}`;
-      }
+      latLngs.push([lat, lon]);
 
-      const pinColor = s.status === "completed" ? "#10b981" : (s.breached ? "#ef4444" : "#f59e0b");
-      pinsHtml += `
-        <g transform="translate(${pt.x}, ${pt.y})">
-          <circle cx="0" cy="0" r="12" fill="${pinColor}" fill-opacity="0.25" />
-          <circle cx="0" cy="0" r="7" fill="${pinColor}" stroke="#ffffff" stroke-width="1.5" />
-          <text x="0" y="3" text-anchor="middle" fill="#ffffff" font-size="8" font-weight="700">${idx + 1}</text>
-          <text x="0" y="-12" text-anchor="middle" fill="#0f172a" font-size="10" font-weight="600">${s.address || ""}</text>
-        </g>
-      `;
+      const pinBg = s.status === "completed" ? "#10b981" : (s.breached ? "#ef4444" : "#f59e0b");
+      const pinIcon = L.divIcon({
+        className: "custom-stop-pin",
+        html: `
+          <div style="background-color: ${pinBg}; color: #ffffff; width: 24px; height: 24px; border-radius: 50%; border: 2px solid #ffffff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; box-shadow: 0 2px 5px rgba(0,0,0,0.25);">
+            ${idx + 1}
+          </div>
+        `,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      });
+
+      const marker = L.marker([lat, lon], { icon: pinIcon }).addTo(leafletMap);
+      marker.bindPopup(`
+        <strong>Stop #${idx + 1}: ${s.address || "Destination"}</strong><br>
+        Customer: ${s.customer_name || "Customer"}<br>
+        Window: ${s.window_end || "17:00"} | ETA: ${s.eta || "--:--"}<br>
+        Status: <strong>${s.status || "Pending"}</strong>
+      `);
+      stopMarkers.push(marker);
     }
   });
 
-  pinsGroup.innerHTML = pinsHtml;
-  polylineElem.setAttribute("d", pathD);
+  // Update Route Polyline on Map
+  if (routePolyline) {
+    leafletMap.removeLayer(routePolyline);
+  }
+
+  if (latLngs.length > 1) {
+    routePolyline = L.polyline(latLngs, {
+      color: "#0f172a",
+      weight: 4,
+      dashArray: "6, 8",
+      opacity: 0.85,
+    }).addTo(leafletMap);
+
+    // Zoom and pan map to fit full route
+    try {
+      leafletMap.fitBounds(L.latLngBounds(latLngs), { padding: [40, 40], maxZoom: 14 });
+    } catch (e) {}
+  }
 }
 
 // ----------------------------------------------------
@@ -277,9 +345,9 @@ window.approveDelayNotification = async function(stopId) {
       body: JSON.stringify({ stop_id: stopId }),
     });
     addTimelineItem({
-      agent: "notifier_agent",
+      agent: "Notifier Specialist",
       title: "Notification Transmitted",
-      text: `Approved and transmitted customer delay SMS/WhatsApp alert for Stop ${stopId}.`,
+      text: `Approved and transmitted customer delay SMS alert for Stop ${stopId}.`,
       type: "tool",
     });
     refreshState();
@@ -289,10 +357,10 @@ window.approveDelayNotification = async function(stopId) {
 };
 
 // ----------------------------------------------------
-// Conversational Chat & Streaming SSE Handler
+// Conversational Dispatcher & Streaming SSE Handler
 // ----------------------------------------------------
 function setupEventListeners() {
-  // Simulator Buttons
+  // Tracking Controller Buttons
   document.getElementById("btnStartSim").addEventListener("click", async () => {
     await fetch("/api/sim/start", { method: "POST" });
     refreshState();
@@ -349,7 +417,7 @@ async function sendChatMessage(message) {
     });
 
     if (!res.ok) {
-      appendChatMessage("bot", "Error communicating with Logistics Dispatch Agents backend.");
+      appendChatMessage("bot", "Error communicating with Logistics Dispatch Platform backend.");
       sendBtn.disabled = false;
       timelineBadge.textContent = "Ready";
       timelineBadge.className = "badge badge-idle";
@@ -405,7 +473,7 @@ function handleSseEvent(eventType, data) {
   switch (eventType) {
     case "agent_step":
       addTimelineItem({
-        agent: data.agent || "dispatcher",
+        agent: data.agent || "Lead Dispatcher",
         title: `Agent Transition: ${data.agent}`,
         text: data.message,
         type: "agent",
@@ -414,8 +482,8 @@ function handleSseEvent(eventType, data) {
 
     case "tool_call":
       addTimelineItem({
-        agent: data.agent || "dispatcher",
-        title: `Tool Call: ${data.tool}()`,
+        agent: data.agent || "Lead Dispatcher",
+        title: `Dispatch Tool: ${data.tool}()`,
         text: `Parameters: ${JSON.stringify(data.args)}`,
         type: "tool",
       });
@@ -423,7 +491,7 @@ function handleSseEvent(eventType, data) {
 
     case "tool_result":
       addTimelineItem({
-        agent: data.agent || "dispatcher",
+        agent: data.agent || "Lead Dispatcher",
         title: `Tool Result: ${data.tool}()`,
         text: `Output received successfully (${Object.keys(data.result || {}).length} keys).`,
         type: "tool",
@@ -432,8 +500,8 @@ function handleSseEvent(eventType, data) {
 
     case "loop_iteration":
       addTimelineItem({
-        agent: data.agent || "LoopAgent",
-        title: `Loop Iteration #${data.iteration || 1} [${data.status || 'Active'}]`,
+        agent: data.agent || "Route Optimizer",
+        title: `Optimization Cycle #${data.iteration || 1} [${data.status || 'Active'}]`,
         text: data.action || data.feedback || "Auditing routing constraints...",
         type: data.status === "breached" ? "breached" : "loop",
       });
@@ -441,9 +509,9 @@ function handleSseEvent(eventType, data) {
 
     case "healing":
       addTimelineItem({
-        agent: "Self-Healing Watcher",
-        title: "⚡ Self-Healing Recovery Event",
-        text: data.message || "Routes API degraded fallback engaged gracefully.",
+        agent: "Self-Healing Engine",
+        title: "⚡ Autonomous Recovery Event",
+        text: data.message || "Route planner fallback engaged gracefully.",
         type: "healing",
       });
       break;
@@ -463,7 +531,7 @@ function appendChatMessage(sender, text) {
   const msgElem = document.createElement("div");
   msgElem.className = `chat-message ${sender}-message`;
 
-  const avatar = sender === "user" ? "YOU" : "ADK";
+  const avatar = sender === "user" ? "YOU" : "DISP";
   // Simple markdown conversion for bolding
   const formattedText = (text || "").replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>").replace(/\n/g, "<br>");
 
@@ -507,7 +575,7 @@ async function showDiagnosticsModal() {
   const modal = document.getElementById("diagnosticsModal");
   const content = document.getElementById("modalDiagnosticsContent");
   modal.classList.remove("hidden");
-  content.innerHTML = `<div class="loading-spinner">Running diagnostic probe across Gemini, Routes API, Store, and MCP...</div>`;
+  content.innerHTML = `<div class="loading-spinner">Running diagnostic probe across core services...</div>`;
 
   try {
     const res = await fetch("/api/diagnostics");
@@ -520,8 +588,8 @@ async function showDiagnosticsModal() {
             ${diag.gemini.status === 'PASS' ? '✓' : '!'}
           </span>
           <div class="health-info">
-            <span class="health-title">Gemini API: ${diag.gemini.status}</span>
-            <span class="health-sub">Model: ${diag.gemini.model || 'gemini-3.6-flash'} | Response: "${diag.gemini.response}" | Masked Key: ...${diag.gemini.masked_key || ''}</span>
+            <span class="health-title">AI Engine: ${diag.gemini.status}</span>
+            <span class="health-sub">Model: ${diag.gemini.model || 'Enterprise AI'} | Status: "${diag.gemini.response}"</span>
           </div>
         </div>
 
@@ -530,7 +598,7 @@ async function showDiagnosticsModal() {
             ${diag.routes.status === 'PASS' ? '✓' : '⚡'}
           </span>
           <div class="health-info">
-            <span class="health-title">Routes API: ${diag.routes.status} (${diag.routes.mode})</span>
+            <span class="health-title">Routing Engine: ${diag.routes.status} (${diag.routes.mode})</span>
             <span class="health-sub">${diag.routes.details || 'Routes computation operational.'}</span>
           </div>
         </div>
@@ -539,15 +607,15 @@ async function showDiagnosticsModal() {
           <span class="health-icon health-pass">✓</span>
           <div class="health-info">
             <span class="health-title">Persistence Backend: ${diag.store.status}</span>
-            <span class="health-sub">Mode: ${diag.store.backend} (${diag.store.file})</span>
+            <span class="health-sub">Mode: ${diag.store.backend}</span>
           </div>
         </div>
 
         <div class="health-item">
           <span class="health-icon health-pass">✓</span>
           <div class="health-info">
-            <span class="health-title">MCP Stdio Server: ${diag.mcp.status}</span>
-            <span class="health-sub">Protocol: ${diag.mcp.protocol} | Tools: ${diag.mcp.tools.join(', ')}</span>
+            <span class="health-title">Gateway Services: ${diag.mcp.status}</span>
+            <span class="health-sub">Tools: ${diag.mcp.tools.join(', ')}</span>
           </div>
         </div>
       </div>

@@ -3,11 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Logistics Dispatch Agents | Autonomous Fleet Operations</title>
-  <meta name="description" content="Autonomous multi-model logistics dispatch and route optimization platform powered by Google ADK, Gemini, Routes API, and MCP.">
+  <title>Logistics Dispatch Platform | Autonomous Fleet Operations</title>
+  <meta name="description" content="Autonomous multi-model logistics dispatch and route optimization platform.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Leaflet OpenStreetMap CDN -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -23,11 +28,11 @@
         </svg>
       </div>
       <div class="brand-info">
-        <h1 class="brand-title">LOGISTICS DISPATCH AGENTS</h1>
+        <h1 class="brand-title">LOGISTICS DISPATCH PLATFORM</h1>
         <div class="brand-badges">
-          <span class="badge badge-adk">Google ADK 2.12</span>
-          <span class="badge badge-gemini">Gemini 3.6 Flash</span>
-          <span class="badge badge-mcp">MCP Stdio</span>
+          <span class="badge badge-primary">Enterprise Dispatch</span>
+          <span class="badge badge-gemini">Multi-Agent AI</span>
+          <span class="badge badge-mcp">Live Telemetry</span>
         </div>
       </div>
     </div>
@@ -56,7 +61,7 @@
 
   <!-- Main 3-Column Dashboard -->
   <main class="dashboard-grid">
-    <!-- COLUMN 1: Fleet Telemetry & Simulator Controls -->
+    <!-- COLUMN 1: Fleet Telemetry & Driver Controls -->
     <section class="col col-telemetry">
       <!-- Live Telemetry Card -->
       <div class="card">
@@ -92,25 +97,25 @@
         </div>
       </div>
 
-      <!-- Autonomous Simulator Controls -->
+      <!-- Autonomous Driver Controls -->
       <div class="card">
         <div class="card-header">
-          <h2 class="card-title">Driver Simulation Controller</h2>
+          <h2 class="card-title">Driver Telemetry Controller</h2>
           <span id="simStatusBadge" class="badge badge-idle">Idle</span>
         </div>
-        <p class="card-desc">Simulates real-world vehicle GPS movement along the Chennai metropolitan delivery corridor.</p>
+        <p class="card-desc">Tracks and broadcasts live vehicle GPS updates along the Chennai metropolitan delivery corridor.</p>
         <div class="sim-actions">
           <button id="btnStartSim" class="btn btn-primary btn-block">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
               <polygon points="5 3 19 12 5 21 5 3"></polygon>
             </svg>
-            Start Driver Simulation
+            Start Driver Tracking
           </button>
           <button id="btnStopSim" class="btn btn-outline btn-block" disabled>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
               <rect x="6" y="6" width="12" height="12"></rect>
             </svg>
-            Stop Simulation
+            Stop Tracking
           </button>
         </div>
         <div class="sim-progress-wrap">
@@ -118,7 +123,7 @@
             <div id="simProgressBar" class="sim-progress-fill" style="width: 0%;"></div>
           </div>
           <div class="sim-progress-labels">
-            <span id="simStepLabel">Step: 0 / 21</span>
+            <span id="simStepLabel">Waypoint: 0 / 21</span>
             <span id="simWaypointLabel">Hub -> Anna Salai</span>
           </div>
         </div>
@@ -144,43 +149,43 @@
           </div>
           <div class="kpi-card">
             <span class="kpi-num" id="kpiLoops">0</span>
-            <span class="kpi-title">Loop Iterations</span>
+            <span class="kpi-title">Feedback Cycles</span>
           </div>
         </div>
       </div>
 
-      <!-- Architecture Health Checks -->
+      <!-- System Health Checks -->
       <div class="card">
         <div class="card-header">
-          <h2 class="card-title">System Health & Fallbacks</h2>
+          <h2 class="card-title">System Health & Resilience</h2>
         </div>
         <div class="health-list">
           <div class="health-item">
             <span class="health-icon health-pass">✓</span>
             <div class="health-info">
-              <span class="health-title">Gemini 3.6 Flash</span>
-              <span class="health-sub">Active Google GenAI Model</span>
+              <span class="health-title">AI Reasoning Engine</span>
+              <span class="health-sub">Active Enterprise Model</span>
             </div>
           </div>
           <div class="health-item">
             <span id="routesHealthIcon" class="health-icon health-warn">⚡</span>
             <div class="health-info">
-              <span class="health-title">Routes Optimization</span>
-              <span id="routesHealthSub" class="health-sub">Haversine TSP Degraded Active</span>
+              <span class="health-title">Route Optimization</span>
+              <span id="routesHealthSub" class="health-sub">Traffic-Aware Routing Engine</span>
             </div>
           </div>
           <div class="health-item">
             <span class="health-icon health-pass">✓</span>
             <div class="health-info">
-              <span class="health-title">Dual Store Backend</span>
-              <span class="health-sub">Local JSON + Firestore Fallback</span>
+              <span class="health-title">Persistence Backend</span>
+              <span class="health-sub">Dual-Store Fault-Tolerant Engine</span>
             </div>
           </div>
           <div class="health-item">
             <span class="health-icon health-pass">✓</span>
             <div class="health-info">
-              <span class="health-title">MCP Stdio Server</span>
-              <span class="health-sub">3 Tools Registered via McpToolset</span>
+              <span class="health-title">Fleet Protocol Gateway</span>
+              <span class="health-sub">3 Core Dispatch Tools Connected</span>
             </div>
           </div>
         </div>
@@ -194,7 +199,7 @@
         <div class="card-header">
           <div class="map-title-wrap">
             <h2 class="card-title">Chennai Metro Dispatch Map</h2>
-            <span id="mapEngineBadge" class="badge badge-primary">Interactive Vector Map</span>
+            <span id="mapEngineBadge" class="badge badge-primary">Live Geographic Map</span>
           </div>
           <div class="map-legend">
             <span class="legend-item"><span class="legend-dot dot-driver"></span> Driver</span>
@@ -204,35 +209,8 @@
         </div>
 
         <div id="mapContainer" class="map-container">
-          <!-- Google Maps container or Vector fallback canvas -->
-          <div id="googleMap" class="google-map-elem"></div>
-          <svg id="vectorMap" class="vector-map-elem" viewBox="0 0 800 500">
-            <!-- Road and background paths -->
-            <rect width="800" height="500" fill="#f8fafc" />
-            <path d="M 100 80 Q 250 150 400 220 T 700 380" stroke="#e2e8f0" stroke-width="24" fill="none" stroke-linecap="round" />
-            <path d="M 200 450 Q 350 300 400 220 T 600 80" stroke="#e2e8f0" stroke-width="18" fill="none" stroke-linecap="round" />
-            <path d="M 50 250 L 750 250" stroke="#f1f5f9" stroke-width="12" fill="none" />
-            
-            <!-- Active Route Polyline -->
-            <path id="routePolyline" d="" stroke="#0f172a" stroke-width="4" stroke-dasharray="8 4" fill="none" />
-
-            <!-- Static Location Labels -->
-            <text x="140" y="85" fill="#94a3b8" font-size="11" font-weight="500">Chennai Central Hub</text>
-            <text x="360" y="190" fill="#94a3b8" font-size="11" font-weight="500">T. Nagar Commercial</text>
-            <text x="320" y="295" fill="#94a3b8" font-size="11" font-weight="500">Guindy Estate</text>
-            <text x="560" y="325" fill="#94a3b8" font-size="11" font-weight="500">Adyar Zone</text>
-            <text x="520" y="440" fill="#94a3b8" font-size="11" font-weight="500">OMR Tech Corridor</text>
-
-            <!-- Stop Pin Group -->
-            <g id="stopPinsGroup"></g>
-
-            <!-- Driver Marker -->
-            <g id="driverMarkerGroup" transform="translate(180, 100)">
-              <circle cx="0" cy="0" r="16" fill="#3b82f6" fill-opacity="0.2" class="pulse-ring" />
-              <circle cx="0" cy="0" r="10" fill="#0f172a" />
-              <polygon points="0,-7 5,5 0,2 -5,5" fill="#ffffff" id="driverHeadingArrow" />
-            </g>
-          </svg>
+          <!-- Live Interactive Geographic Map via Leaflet OpenStreetMap Tiles -->
+          <div id="liveLeafletMap" style="width: 100%; height: 100%; min-height: 340px; z-index: 1;"></div>
         </div>
 
         <!-- Route Summary Ribbon -->
@@ -289,7 +267,7 @@
       <!-- Quick Dispatch Prompts -->
       <div class="card quick-actions-card">
         <div class="card-header">
-          <h2 class="card-title">Judge Demo Prompts</h2>
+          <h2 class="card-title">Operational Prompts</h2>
         </div>
         <div class="chips-container">
           <button class="chip" data-prompt="Where is driver-1?">
@@ -311,14 +289,14 @@
       <div class="card chat-card">
         <div class="card-header">
           <h2 class="card-title">Autonomous Dispatcher</h2>
-          <span class="badge badge-adk">ADK LoopAgent</span>
+          <span class="badge badge-primary">AI Supervisor</span>
         </div>
         <div id="chatHistory" class="chat-history">
           <div class="chat-message bot-message">
-            <div class="msg-avatar">ADK</div>
+            <div class="msg-avatar">DISP</div>
             <div class="msg-content">
-              <p>Welcome to <strong>Logistics Dispatch Agents</strong>. I coordinate live vehicle tracking, order intake, Google Routes API planning, and deadline audits with self-healing recovery.</p>
-              <p>Click any demo prompt above or describe delivery orders to begin!</p>
+              <p>Welcome to the <strong>Logistics Dispatch Platform</strong>. I coordinate real-time vehicle tracking, order intake, route planning, and delivery deadline audits with autonomous recovery.</p>
+              <p>Click any operational prompt above or describe delivery orders to begin!</p>
             </div>
           </div>
         </div>

@@ -16,8 +16,8 @@ def test_index_serves_html(client):
     """Verifies that the pure-white minimalist UI is served at root."""
     res = client.get("/")
     assert res.status_code == 200
-    assert b"LOGISTICS DISPATCH AGENTS" in res.data
-    assert b"Google ADK 2.12" in res.data
+    assert b"LOGISTICS DISPATCH PLATFORM" in res.data
+    assert b"Enterprise Dispatch" in res.data
 
 
 def test_api_config(client):

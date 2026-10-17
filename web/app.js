@@ -1,5 +1,6 @@
 /**
- * Logistics Dispatch Platform - Client Dashboard & Streaming SSE Controller
+ * Logistics Dispatch Platform - Client Dashboard & Dual Map Engine Controller
+ * Supports native Google Maps JavaScript API with clean OpenStreetMap fallback.
  */
 
 // Known landmarks for coordinate fallback mapping (Chennai Metropolitan Area)
@@ -13,24 +14,48 @@ const CHENNAI_COORDS = {
   "hub": { lat: 13.0827, lon: 80.2707 },
 };
 
+// Pure-white minimalist style for Google Maps
+const PURE_WHITE_GOOGLE_MAP_STYLE = [
+  { elementType: "geometry", stylers: [{ color: "#f8fafc" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#334155" }] },
+  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#0f172a" }] },
+  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#64748b" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#e2e8f0" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#f1f5f9" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#cbd5e1" }] },
+  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#f1f5f9" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#e0f2fe" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#0284c7" }] },
+];
+
 let clientConfig = null;
 let currentVehicleId = "driver-1";
 let isSimRunning = false;
 
-// Leaflet Map objects
-let leafletMap = null;
-let driverMarker = null;
-let stopMarkers = [];
-let routePolyline = null;
+// Active map engine flag ('google' or 'leaflet')
+let activeMapEngine = "google";
+
+// Google Maps instances
+let gMap = null;
+let gDriverMarker = null;
+let gStopMarkers = [];
+let gPolyline = null;
+
+// Leaflet instances
+let lMap = null;
+let lDriverMarker = null;
+let lStopMarkers = [];
+let lPolyline = null;
 
 // ----------------------------------------------------
 // UI Initialization
 // ----------------------------------------------------
 document.addEventListener("DOMContentLoaded", async () => {
   initClock();
-  initLeafletMap();
   setupEventListeners();
-  await loadConfig();
+  await loadConfigAndInitMap();
   await refreshState();
   setInterval(refreshState, 1500);
 });
@@ -46,63 +71,142 @@ function initClock() {
 }
 
 // ----------------------------------------------------
-// Initialize Real Geographic Map (Leaflet / OpenStreetMap)
+// Map Initialization: Google Maps with Clean OSM Fallback
 // ----------------------------------------------------
-function initLeafletMap() {
-  const mapElem = document.getElementById("liveLeafletMap");
-  if (!mapElem) return;
-
-  try {
-    // Center at Chennai Central Hub (13.0827, 80.2707) with zoom 12
-    leafletMap = L.map("liveLeafletMap", {
-      zoomControl: true,
-      attributionControl: true,
-    }).setView([13.05, 80.24], 12);
-
-    // High performance CartoDB Positron clean minimalist tiles (pure white style)
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: "abcd",
-      maxZoom: 19,
-    }).addTo(leafletMap);
-
-    // Create custom vehicle driver icon
-    const driverIcon = L.divIcon({
-      className: "custom-driver-icon",
-      html: `
-        <div style="position: relative; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
-          <div style="position: absolute; width: 28px; height: 28px; background: rgba(37,99,235,0.25); border-radius: 50%; animation: pulse 2s infinite ease-out;"></div>
-          <div style="width: 18px; height: 18px; background: #0f172a; border: 2px solid #ffffff; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
-            <div id="leafletDriverHeading" style="width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 7px solid #38bdf8; transform: rotate(0deg);"></div>
-          </div>
-        </div>
-      `,
-      iconSize: [32, 32],
-      iconAnchor: [16, 16],
-    });
-
-    driverMarker = L.marker([13.0827, 80.2707], { icon: driverIcon }).addTo(leafletMap);
-    driverMarker.bindPopup("<strong>Driver driver-1</strong><br>Fleet Active").openPopup();
-
-    // Force map size invalidation to guarantee full container rendering
-    setTimeout(() => {
-      leafletMap.invalidateSize();
-    }, 400);
-
-  } catch (err) {
-    console.error("Leaflet initialization error:", err);
-  }
-}
-
-async function loadConfig() {
+async function loadConfigAndInitMap() {
   try {
     const res = await fetch("/api/config");
     clientConfig = await res.json();
     if (clientConfig.force_routes_failure) {
       document.getElementById("routesHealthSub").textContent = "Traffic-Aware Routing Engine (Autonomous Recovery Active)";
     }
+
+    const mapsApiKey = clientConfig.maps_api_key;
+    if (mapsApiKey && mapsApiKey.startsWith("AIzaSy")) {
+      initGoogleMapsApi(mapsApiKey);
+    } else {
+      switchToLeafletMap();
+    }
   } catch (err) {
-    console.error("Failed to load /api/config:", err);
+    console.error("Config fetch failed, using fallback map:", err);
+    switchToLeafletMap();
+  }
+}
+
+// Handle Google Maps Authentication Failures (e.g. key domain restrictions)
+window.gm_authFailure = function() {
+  console.warn("[Google Maps] Authentication failure or domain restriction detected. Switching to clean OpenStreetMap engine.");
+  switchToLeafletMap();
+};
+
+function initGoogleMapsApi(apiKey) {
+  // Define global callback
+  window.onGoogleMapsReady = function() {
+    try {
+      const mapContainer = document.getElementById("googleMap");
+      if (!mapContainer) return;
+
+      gMap = new google.maps.Map(mapContainer, {
+        center: { lat: 13.05, lng: 80.24 },
+        zoom: 12,
+        styles: PURE_WHITE_GOOGLE_MAP_STYLE,
+        disableDefaultUI: false,
+        zoomControl: true,
+        streetViewControl: false,
+        mapTypeControl: false,
+      });
+
+      // Driver custom marker icon with heading rotation SVG
+      const driverSvg = {
+        path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+        scale: 6,
+        fillColor: "#0f172a",
+        fillOpacity: 1,
+        strokeColor: "#38bdf8",
+        strokeWeight: 2,
+        rotation: 190,
+      };
+
+      gDriverMarker = new google.maps.Marker({
+        position: { lat: 13.0827, lng: 80.2707 },
+        map: gMap,
+        title: "driver-1 (Active)",
+        icon: driverSvg,
+      });
+
+      activeMapEngine = "google";
+      const badge = document.getElementById("mapEngineBadge");
+      if (badge) {
+        badge.textContent = "Google Maps API";
+        badge.className = "badge badge-primary";
+      }
+
+      console.info("[Google Maps] Google Maps JavaScript API loaded and operational.");
+    } catch (e) {
+      console.warn("Google Maps setup failed:", e);
+      switchToLeafletMap();
+    }
+  };
+
+  // Inject Google Maps script dynamically
+  const script = document.createElement("script");
+  script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=onGoogleMapsReady&libraries=geometry`;
+  script.async = true;
+  script.defer = true;
+  script.onerror = () => {
+    console.warn("[Google Maps] Script tag error. Engaging clean OpenStreetMap fallback.");
+    switchToLeafletMap();
+  };
+  document.head.appendChild(script);
+}
+
+function switchToLeafletMap() {
+  activeMapEngine = "leaflet";
+  const gElem = document.getElementById("googleMap");
+  const lElem = document.getElementById("liveLeafletMap");
+  if (gElem) gElem.style.display = "none";
+  if (lElem) lElem.style.display = "block";
+
+  const badge = document.getElementById("mapEngineBadge");
+  if (badge) {
+    badge.textContent = "Live Geographic Map";
+    badge.className = "badge badge-primary";
+  }
+
+  if (!lMap) {
+    try {
+      lMap = L.map("liveLeafletMap", {
+        zoomControl: true,
+        attributionControl: true,
+      }).setView([13.05, 80.24], 12);
+
+      // Clean Standard OpenStreetMap tiles - ZERO WATERMARK, 100% FREE PUBLIC ACCESS
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19,
+      }).addTo(lMap);
+
+      const driverIcon = L.divIcon({
+        className: "custom-driver-icon",
+        html: `
+          <div style="position: relative; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
+            <div style="position: absolute; width: 28px; height: 28px; background: rgba(37,99,235,0.25); border-radius: 50%; animation: pulse 2s infinite ease-out;"></div>
+            <div style="width: 18px; height: 18px; background: #0f172a; border: 2px solid #ffffff; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
+              <div id="leafletDriverHeading" style="width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 7px solid #38bdf8; transform: rotate(0deg);"></div>
+            </div>
+          </div>
+        `,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+      });
+
+      lDriverMarker = L.marker([13.0827, 80.2707], { icon: driverIcon }).addTo(lMap);
+      lDriverMarker.bindPopup("<strong>Driver driver-1</strong><br>Fleet Active");
+
+      setTimeout(() => { lMap.invalidateSize(); }, 400);
+    } catch (err) {
+      console.error("Leaflet fallback setup error:", err);
+    }
   }
 }
 
@@ -125,11 +229,16 @@ async function refreshState() {
       document.getElementById("telemetryAddress").textContent = v.address || `${v.latitude.toFixed(4)}, ${v.longitude.toFixed(4)}`;
       document.getElementById("telemetryPing").textContent = v.timestamp ? new Date(v.timestamp).toLocaleTimeString() : "Just now";
 
-      // Move Driver Pin on Leaflet Map
-      if (driverMarker && leafletMap) {
-        const newLatLng = new L.LatLng(v.latitude, v.longitude);
-        driverMarker.setLatLng(newLatLng);
-        
+      // Move Driver on Active Map Engine
+      if (activeMapEngine === "google" && gDriverMarker && gMap) {
+        gDriverMarker.setPosition({ lat: v.latitude, lng: v.longitude });
+        const icon = gDriverMarker.getIcon();
+        if (icon && v.heading !== undefined) {
+          icon.rotation = v.heading;
+          gDriverMarker.setIcon(icon);
+        }
+      } else if (lDriverMarker && lMap) {
+        lDriverMarker.setLatLng([v.latitude, v.longitude]);
         const headingElem = document.getElementById("leafletDriverHeading");
         if (headingElem && v.heading !== undefined) {
           headingElem.style.transform = `rotate(${v.heading}deg)`;
@@ -190,14 +299,24 @@ function renderStopsAndMap(stops, routePlan, vehicle) {
     tbody.innerHTML = `<tr class="empty-row"><td colspan="6">No active route planned. Submit an order prompt to optimize dispatch.</td></tr>`;
     stopCountBadge.textContent = "0 Stops";
 
-    // Clear stop markers from map
-    if (stopMarkers.length > 0 && leafletMap) {
-      stopMarkers.forEach(m => leafletMap.removeLayer(m));
-      stopMarkers = [];
+    // Clear Google Maps layers
+    if (gStopMarkers.length > 0) {
+      gStopMarkers.forEach(m => m.setMap(null));
+      gStopMarkers = [];
     }
-    if (routePolyline && leafletMap) {
-      leafletMap.removeLayer(routePolyline);
-      routePolyline = null;
+    if (gPolyline) {
+      gPolyline.setMap(null);
+      gPolyline = null;
+    }
+
+    // Clear Leaflet layers
+    if (lStopMarkers.length > 0 && lMap) {
+      lStopMarkers.forEach(m => lMap.removeLayer(m));
+      lStopMarkers = [];
+    }
+    if (lPolyline && lMap) {
+      lMap.removeLayer(lPolyline);
+      lPolyline = null;
     }
     return;
   }
@@ -236,12 +355,89 @@ function renderStopsAndMap(stops, routePlan, vehicle) {
     document.getElementById("routeHealingStatus").className = routePlan.degraded ? "stat-val text-danger" : "stat-val text-success";
   }
 
-  // Render Stop Markers & Polyline on Leaflet Map
-  if (!leafletMap) return;
+  // --- RENDER ON GOOGLE MAPS ---
+  if (activeMapEngine === "google" && gMap) {
+    // Clear old markers
+    gStopMarkers.forEach(m => m.setMap(null));
+    gStopMarkers = [];
+
+    const bounds = new google.maps.LatLngBounds();
+    const gCoords = [];
+
+    if (vehicle && vehicle.latitude && vehicle.longitude) {
+      const vPos = { lat: vehicle.latitude, lng: vehicle.longitude };
+      gCoords.push(vPos);
+      bounds.extend(vPos);
+    }
+
+    stops.forEach((s, idx) => {
+      let lat = s.latitude;
+      let lon = s.longitude;
+      if (!lat || !lon) {
+        const lower = (s.address || "").toLowerCase();
+        for (const [key, coords] of Object.entries(CHENNAI_COORDS)) {
+          if (lower.includes(key)) {
+            lat = coords.lat;
+            lon = coords.lon;
+            break;
+          }
+        }
+      }
+
+      if (lat && lon) {
+        const pos = { lat, lng: lon };
+        gCoords.push(pos);
+        bounds.extend(pos);
+
+        const pinColor = s.status === "completed" ? "#10b981" : (s.breached ? "#ef4444" : "#f59e0b");
+        const marker = new google.maps.Marker({
+          position: pos,
+          map: gMap,
+          label: {
+            text: `${idx + 1}`,
+            color: "#ffffff",
+            fontWeight: "bold",
+            fontSize: "11px",
+          },
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            fillColor: pinColor,
+            fillOpacity: 1,
+            strokeColor: "#ffffff",
+            strokeWeight: 2,
+            scale: 12,
+          },
+          title: `Stop #${idx + 1}: ${s.address}`,
+        });
+
+        const info = new google.maps.InfoWindow({
+          content: `<strong>Stop #${idx + 1}: ${s.address}</strong><br>ETA: ${s.eta || "--:--"}<br>Status: ${s.status}`,
+        });
+        marker.addListener("click", () => info.open(gMap, marker));
+        gStopMarkers.push(marker);
+      }
+    });
+
+    if (gPolyline) gPolyline.setMap(null);
+    if (gCoords.length > 1) {
+      gPolyline = new google.maps.Polyline({
+        path: gCoords,
+        strokeColor: "#0f172a",
+        strokeWeight: 4,
+        strokeOpacity: 0.85,
+        map: gMap,
+      });
+      gMap.fitBounds(bounds, { top: 40, bottom: 40, left: 40, right: 40 });
+    }
+    return;
+  }
+
+  // --- RENDER ON LEAFLET MAP ---
+  if (!lMap) return;
 
   // Clear existing stop markers
-  stopMarkers.forEach(m => leafletMap.removeLayer(m));
-  stopMarkers = [];
+  lStopMarkers.forEach(m => lMap.removeLayer(m));
+  lStopMarkers = [];
 
   const latLngs = [];
   if (vehicle && vehicle.latitude && vehicle.longitude) {
@@ -252,7 +448,6 @@ function renderStopsAndMap(stops, routePlan, vehicle) {
     let lat = s.latitude;
     let lon = s.longitude;
 
-    // Fallback geocode matching if lat/lon missing
     if (!lat || !lon) {
       const lower = (s.address || "").toLowerCase();
       for (const [key, coords] of Object.entries(CHENNAI_COORDS)) {
@@ -279,33 +474,32 @@ function renderStopsAndMap(stops, routePlan, vehicle) {
         iconAnchor: [12, 12],
       });
 
-      const marker = L.marker([lat, lon], { icon: pinIcon }).addTo(leafletMap);
+      const marker = L.marker([lat, lon], { icon: pinIcon }).addTo(lMap);
       marker.bindPopup(`
         <strong>Stop #${idx + 1}: ${s.address || "Destination"}</strong><br>
         Customer: ${s.customer_name || "Customer"}<br>
         Window: ${s.window_end || "17:00"} | ETA: ${s.eta || "--:--"}<br>
         Status: <strong>${s.status || "Pending"}</strong>
       `);
-      stopMarkers.push(marker);
+      lStopMarkers.push(marker);
     }
   });
 
   // Update Route Polyline on Map
-  if (routePolyline) {
-    leafletMap.removeLayer(routePolyline);
+  if (lPolyline) {
+    lMap.removeLayer(lPolyline);
   }
 
   if (latLngs.length > 1) {
-    routePolyline = L.polyline(latLngs, {
+    lPolyline = L.polyline(latLngs, {
       color: "#0f172a",
       weight: 4,
       dashArray: "6, 8",
       opacity: 0.85,
-    }).addTo(leafletMap);
+    }).addTo(lMap);
 
-    // Zoom and pan map to fit full route
     try {
-      leafletMap.fitBounds(L.latLngBounds(latLngs), { padding: [40, 40], maxZoom: 14 });
+      lMap.fitBounds(L.latLngBounds(latLngs), { padding: [40, 40], maxZoom: 14 });
     } catch (e) {}
   }
 }
@@ -360,7 +554,6 @@ window.approveDelayNotification = async function(stopId) {
 // Conversational Dispatcher & Streaming SSE Handler
 // ----------------------------------------------------
 function setupEventListeners() {
-  // Tracking Controller Buttons
   document.getElementById("btnStartSim").addEventListener("click", async () => {
     await fetch("/api/sim/start", { method: "POST" });
     refreshState();
@@ -371,13 +564,11 @@ function setupEventListeners() {
     refreshState();
   });
 
-  // Diagnostics Modal Buttons
   document.getElementById("btnOpenDiagnostics").addEventListener("click", showDiagnosticsModal);
   document.getElementById("btnCloseModal").addEventListener("click", hideDiagnosticsModal);
   document.getElementById("btnCloseModalBtn").addEventListener("click", hideDiagnosticsModal);
   document.getElementById("btnRerunDiagnostics").addEventListener("click", showDiagnosticsModal);
 
-  // Demo Prompt Chips
   document.querySelectorAll(".chip").forEach(chip => {
     chip.addEventListener("click", () => {
       const prompt = chip.getAttribute("data-prompt");
@@ -386,7 +577,6 @@ function setupEventListeners() {
     });
   });
 
-  // Chat Form Submit
   document.getElementById("chatForm").addEventListener("submit", (e) => {
     e.preventDefault();
     const input = document.getElementById("chatInput");
@@ -403,7 +593,6 @@ async function sendChatMessage(message) {
   const sendBtn = document.getElementById("btnSendChat");
   const timelineBadge = document.getElementById("timelineStatusBadge");
 
-  // Append User Bubble
   appendChatMessage("user", message);
   sendBtn.disabled = true;
   timelineBadge.textContent = "Executing";
@@ -424,7 +613,6 @@ async function sendChatMessage(message) {
       return;
     }
 
-    // Read SSE Stream
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
@@ -435,7 +623,7 @@ async function sendChatMessage(message) {
 
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split("\n\n");
-      buffer = lines.pop(); // Keep unfinished tail
+      buffer = lines.pop();
 
       for (const chunk of lines) {
         if (!chunk.trim()) continue;
@@ -466,9 +654,6 @@ async function sendChatMessage(message) {
   }
 }
 
-// ----------------------------------------------------
-// SSE Event Handler & Timeline Dispatcher
-// ----------------------------------------------------
 function handleSseEvent(eventType, data) {
   switch (eventType) {
     case "agent_step":
@@ -532,7 +717,6 @@ function appendChatMessage(sender, text) {
   msgElem.className = `chat-message ${sender}-message`;
 
   const avatar = sender === "user" ? "YOU" : "DISP";
-  // Simple markdown conversion for bolding
   const formattedText = (text || "").replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>").replace(/\n/g, "<br>");
 
   msgElem.innerHTML = `
